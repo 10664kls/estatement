@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	hspb "github.com/10664ksl/estatement/genproto/go/http/v1"
+	hspb "github.com/10664kls/estatement/genproto/go/http/v1"
 	"github.com/labstack/echo/v4"
 	stdmw "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"

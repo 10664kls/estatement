@@ -1,4 +1,4 @@
-module github.com/10664ksl/estatement
+module github.com/10664kls/estatement
 
 go 1.24.1
 
