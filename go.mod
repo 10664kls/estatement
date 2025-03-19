@@ -3,6 +3,7 @@ module github.com/10664kls/estatement
 go 1.24.1
 
 require (
+	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	go.uber.org/zap v1.27.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250313205543-e70fdf4c4cb4
@@ -11,7 +12,11 @@ require (
 )
 
 require (
+	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
+	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
+	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
+	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -22,6 +27,7 @@ require (
 )
 
 require (
+	github.com/Masterminds/squirrel v1.5.4
 	github.com/labstack/echo/v4 v4.13.3
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect

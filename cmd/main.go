@@ -12,6 +12,8 @@ import (
 	"time"
 
 	hspb "github.com/10664kls/estatement/genproto/go/http/v1"
+	"github.com/10664kls/estatement/internal/server"
+	"github.com/10664kls/estatement/internal/statement"
 	"github.com/labstack/echo/v4"
 	stdmw "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
@@ -22,15 +24,17 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	_ "github.com/denisenkom/go-mssqldb"
 )
 
-func main(){
+func main() {
 	if err := run(); err != nil {
 		log.Fatalf("failed to run server: %v", err)
 	}
 }
 
-func run() error{
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -65,33 +69,42 @@ func run() error{
 	e.Use(stdmws()...)
 	e.HTTPErrorHandler = httpErr
 
+	statementSvc, err := statement.NewService(ctx, db, zlog)
+	if err != nil {
+		return fmt.Errorf("failed to create statement service: %w", err)
+	}
+
+	server := must(server.NewServer(statementSvc))
+	if err := server.Install(e); err != nil {
+		return fmt.Errorf("failed to install server: %w", err)
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
-			errCh <- e.Start(fmt.Sprintf(":%s", getEnv("PORT", "8080")))
+		errCh <- e.Start(fmt.Sprintf(":%s", getEnv("PORT", "8080")))
 	}()
 
 	ctx, cancel = signal.NotifyContext(ctx, os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer cancel()
 
-		select {
-		case <- ctx.Done():
-			zlog.Info("shutting down server")
+	select {
+	case <-ctx.Done():
+		zlog.Info("shutting down server")
 
-			ctx , cancel := context.WithTimeout(ctx, time.Second * 5)
-			defer cancel()
-			if err := e.Shutdown(ctx); err != nil {
-				zlog.Error("failed to shutdown server", zap.Error(err))
-				return err
-			}
-
-			zlog.Info("server shut down gracefully")
-
-		case err := <- errCh:
-			if err != http.ErrServerClosed && err != nil {
-				return err
-			}
+		ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		if err := e.Shutdown(ctx); err != nil {
+			zlog.Error("failed to shutdown server", zap.Error(err))
+			return err
 		}
+
+		zlog.Info("server shut down gracefully")
+
+	case err := <-errCh:
+		if err != http.ErrServerClosed && err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -134,7 +147,6 @@ func newLogger() (*zap.Logger, error) {
 
 	return zlog, nil
 }
-
 
 func httpErr(err error, c echo.Context) {
 	if s, ok := status.FromError(err); ok {
@@ -204,4 +216,11 @@ func httpStatusPbFromRPC(s *status.Status) *hspb.Error {
 			Details: s.Proto().GetDetails(),
 		},
 	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
