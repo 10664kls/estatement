@@ -24,7 +24,7 @@ type Statement struct {
 }
 
 type Email struct {
-	IsSent  *bool   `json:"isSent"`
+	IsSent  *string `json:"isSent"`
 	Message *string `json:"message"`
 }
 
@@ -49,17 +49,18 @@ type ListStatementsResult struct {
 }
 
 type StatementQuery struct {
-	CreatedBefore time.Time `json:"createdBefore"`
-	CreatedAfter  time.Time `json:"createdAfter"`
-	Gender        string    `json:"gender"`
-	Status        string    `json:"status"`
-	QueueNumber   string    `json:"queueNumber"`
-	ProductName   string    `json:"productName"`
-	BankCode      string    `json:"bankCode"`
-	CreatedBy     string    `json:"createdBy"`
-	Term          uint64    `json:"term"`
-	PageToken     string    `json:"pageToken"`
-	PageSize      uint64    `json:"pageSize"`
+	CreatedBefore time.Time `json:"createdBefore" query:"createdBefore"`
+	CreatedAfter  time.Time `json:"createdAfter" query:"createdAfter"`
+	Gender        string    `json:"gender" query:"gender"`
+	Status        string    `json:"status" query:"status"`
+	Occupation    string    `json:"occupation" query:"occupation"`
+	QueueNumber   string    `json:"queueNumber" query:"queueNumber"`
+	ProductName   string    `json:"productName" query:"productName"`
+	BankCode      string    `json:"bankCode" query:"bankCode"`
+	CreatedBy     string    `json:"createdBy" query:"createdBy"`
+	Term          string    `json:"term" query:"term"`
+	PageToken     string    `json:"pageToken" query:"pageToken"`
+	PageSize      uint64    `json:"pageSize" query:"pageSize"`
 }
 
 func (q *StatementQuery) ToSql() (string, []any, error) {
@@ -79,11 +80,14 @@ func (q *StatementQuery) ToSql() (string, []any, error) {
 	if q.QueueNumber != "" {
 		and = append(and, sq.Eq{"cusnum": q.QueueNumber})
 	}
-	if q.Term != 0 {
+	if q.Term != "" {
 		and = append(and, sq.Eq{"term": q.Term})
 	}
 	if q.CreatedBy != "" {
-		and = append(and, sq.Eq{"createdby": q.CreatedBy})
+		and = append(and, sq.Eq{"createby": q.CreatedBy})
+	}
+	if q.Occupation != "" {
+		and = append(and, sq.Eq{"occupation": q.Occupation})
 	}
 
 	if !q.CreatedBefore.IsZero() {
@@ -131,7 +135,7 @@ func listStatements(ctx context.Context, db *sql.DB, in *StatementQuery) ([]*Sta
 			"AccNo",
 			"term",
 			"bankname",
-			"createdate",
+			"bankcreatedate",
 			"bankstatus",
 			"bankmoreinfo",
 			"gender",
@@ -141,6 +145,7 @@ func listStatements(ctx context.Context, db *sql.DB, in *StatementQuery) ([]*Sta
 			"occupation",
 			"createby",
 			"statusBanking",
+			"createdate",
 		).
 		From("dbo.vm_customer").
 		PlaceholderFormat(sq.AtP).
@@ -157,6 +162,7 @@ func listStatements(ctx context.Context, db *sql.DB, in *StatementQuery) ([]*Sta
 	statements := make([]*Statement, 0)
 	for rows.Next() {
 		var s Statement
+		var isSent sql.NullString
 		err := rows.Scan(
 			&s.ID,
 			&s.QueueNumber,
@@ -169,11 +175,12 @@ func listStatements(ctx context.Context, db *sql.DB, in *StatementQuery) ([]*Sta
 			&s.BankAccount.Info,
 			&s.Customer.Gender,
 			&s.ProductName,
-			&s.Email.IsSent,
+			&isSent,
 			&s.Email.Message,
 			&s.Customer.Occupation,
 			&s.CreatedBy,
 			&s.Status,
+			&s.CreatedAt,
 		)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrStatementNotFound
@@ -181,6 +188,9 @@ func listStatements(ctx context.Context, db *sql.DB, in *StatementQuery) ([]*Sta
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		if isSent.Valid {
+			s.Email.IsSent = &isSent.String
 		}
 
 		statements = append(statements, &s)
@@ -190,4 +200,92 @@ func listStatements(ctx context.Context, db *sql.DB, in *StatementQuery) ([]*Sta
 	}
 
 	return statements, nil
+}
+
+func listProductNames(ctx context.Context, db *sql.DB) ([]string, error) {
+	q, args := sq.
+		Select("productnames").
+		From("dbo.vm_customer").
+		PlaceholderFormat(sq.AtP).
+		GroupBy("productnames").
+		MustSql()
+
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	productNames := make([]string, 0)
+	for rows.Next() {
+		var productName string
+		err := rows.Scan(&productName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		productNames = append(productNames, productName)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return productNames, nil
+}
+
+func listOccupations(ctx context.Context, db *sql.DB) ([]string, error) {
+	q, args := sq.
+		Select("occupation").
+		From("dbo.vm_customer").
+		PlaceholderFormat(sq.AtP).
+		GroupBy("occupation").
+		MustSql()
+
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	occupations := make([]string, 0)
+	for rows.Next() {
+		var occupation string
+		err := rows.Scan(&occupation)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		occupations = append(occupations, occupation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return occupations, nil
+}
+
+func listTerms(ctx context.Context, db *sql.DB) ([]string, error) {
+	q, args := sq.
+		Select("term").
+		From("dbo.vm_customer").
+		PlaceholderFormat(sq.AtP).
+		GroupBy("term").
+		MustSql()
+
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	terms := make([]string, 0)
+	for rows.Next() {
+		var term string
+		err := rows.Scan(&term)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		terms = append(terms, term)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return terms, nil
 }

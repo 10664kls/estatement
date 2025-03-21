@@ -30,7 +30,10 @@ func NewService(_ context.Context, db *sql.DB, zlog *zap.Logger) (*Service, erro
 }
 
 func (s *Service) ListStatements(ctx context.Context, in *StatementQuery) (*ListStatementsResult, error) {
-	zlog := s.zlog.With(zap.Any("query", in))
+	zlog := s.zlog.With(
+		zap.String("method", "ListStatements"),
+		zap.Any("query", in),
+	)
 
 	zlog.Info("starting to list statements")
 
@@ -56,7 +59,10 @@ func (s *Service) ListStatements(ctx context.Context, in *StatementQuery) (*List
 }
 
 func (s *Service) GetStatementByID(ctx context.Context, id string) (*Statement, error) {
-	zlog := s.zlog.With(zap.Any("id", id))
+	zlog := s.zlog.With(
+		zap.String("method", "GetStatementByID"),
+		zap.Any("id", id),
+	)
 
 	zlog.Info("starting to get statement by id")
 
@@ -70,4 +76,43 @@ func (s *Service) GetStatementByID(ctx context.Context, id string) (*Statement, 
 		return nil, err
 	}
 	return statement, nil
+}
+
+func (s *Service) ListProductNames(ctx context.Context) ([]string, error) {
+	zlog := s.zlog.With(zap.Any("method", "ListProductNames"))
+
+	zlog.Info("starting to list product names")
+
+	productNames, err := listProductNames(ctx, s.db)
+	if err != nil {
+		zlog.Error("failed to list product names", zap.Error(err))
+		return nil, err
+	}
+	return productNames, nil
+}
+
+func (s *Service) ListOccupations(ctx context.Context) ([]string, error) {
+	zlog := s.zlog.With(zap.Any("method", "ListOccupations"))
+
+	zlog.Info("starting to list occupations")
+
+	occupations, err := listOccupations(ctx, s.db)
+	if err != nil {
+		zlog.Error("failed to list occupations", zap.Error(err))
+		return nil, err
+	}
+	return occupations, nil
+}
+
+func (s *Service) ListTerms(ctx context.Context) ([]string, error) {
+	zlog := s.zlog.With(zap.Any("method", "ListTerms"))
+
+	zlog.Info("starting to list terms")
+
+	terms, err := listTerms(ctx, s.db)
+	if err != nil {
+		zlog.Error("failed to list terms", zap.Error(err))
+		return nil, err
+	}
+	return terms, nil
 }

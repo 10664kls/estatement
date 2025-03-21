@@ -8,13 +8,13 @@ import (
 
 // Size returns the size of the page.
 // If the size is less than or equal to 0, it returns 20.
-// If the size is greater than 100, it returns 100.
+// If the size is greater than 200, it returns 200.
 func Size(size uint64) uint64 {
 	if size <= 0 {
 		return 20
 	}
-	if size > 100 {
-		return 100
+	if size > 200 {
+		return 200
 	}
 	return size
 }
