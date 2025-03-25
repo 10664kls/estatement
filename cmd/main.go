@@ -11,7 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"aidanwoods.dev/go-paseto"
 	hspb "github.com/10664kls/estatement/genproto/go/http/v1"
+	"github.com/10664kls/estatement/internal/auth"
+	"github.com/10664kls/estatement/internal/middleware"
 	"github.com/10664kls/estatement/internal/server"
 	"github.com/10664kls/estatement/internal/statement"
 	"github.com/labstack/echo/v4"
@@ -60,9 +63,9 @@ func run() error {
 	}
 	defer db.Close()
 
-	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("failed to ping DB: %w", err)
-	}
+	// if err := db.PingContext(ctx); err != nil {
+	// 	return fmt.Errorf("failed to ping DB: %w", err)
+	// }
 
 	e := echo.New()
 	e.HideBanner = true
@@ -74,8 +77,23 @@ func run() error {
 		return fmt.Errorf("failed to create statement service: %w", err)
 	}
 
-	server := must(server.NewServer(statementSvc))
-	if err := server.Install(e); err != nil {
+	akey := must(paseto.V4SymmetricKeyFromHex(os.Getenv("PASETO_ACCESS_KEY")))
+	rkey := must(paseto.V4SymmetricKeyFromHex(os.Getenv("PASETO_REFRESH_KEY")))
+
+	authService, err := auth.NewAuthService(ctx, db, akey, rkey, zlog)
+	if err != nil {
+		return fmt.Errorf("failed to create auth service: %w", err)
+	}
+
+	mws := []echo.MiddlewareFunc{
+		middleware.PASETO(middleware.PASETOConfig{
+			SymmetricKey: akey,
+		}),
+		middleware.SetContextClaimsFromToken,
+	}
+
+	server := must(server.NewServer(statementSvc, authService))
+	if err := server.Install(e, mws...); err != nil {
 		return fmt.Errorf("failed to install server: %w", err)
 	}
 
@@ -185,6 +203,7 @@ func httpErr(err error, c echo.Context) {
 func stdmws() []echo.MiddlewareFunc {
 	return []echo.MiddlewareFunc{
 		stdmw.RemoveTrailingSlash(),
+		// stdmw.Logger(),
 		stdmw.Recover(),
 		stdmw.CORSWithConfig(stdmw.CORSConfig{
 			AllowOriginFunc: func(origin string) (bool, error) {
