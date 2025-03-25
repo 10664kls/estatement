@@ -289,3 +289,142 @@ func listTerms(ctx context.Context, db *sql.DB) ([]string, error) {
 
 	return terms, nil
 }
+
+type BatchGetStatementReq struct {
+	CreatedBefore time.Time `json:"createdBefore" query:"createdBefore"`
+	CreatedAfter  time.Time `json:"createdAfter" query:"createdAfter"`
+	Gender        string    `json:"gender" query:"gender"`
+	Status        string    `json:"status" query:"status"`
+	Occupation    string    `json:"occupation" query:"occupation"`
+	QueueNumber   string    `json:"queueNumber" query:"queueNumber"`
+	ProductName   string    `json:"productName" query:"productName"`
+	BankCode      string    `json:"bankCode" query:"bankCode"`
+	CreatedBy     string    `json:"createdBy" query:"createdBy"`
+	Term          string    `json:"term" query:"term"`
+
+	nextID string
+}
+
+func (q *BatchGetStatementReq) ToSql() (string, []any, error) {
+	and := sq.And{}
+	if q.Gender != "" {
+		and = append(and, sq.Eq{"gender": q.Gender})
+	}
+	if q.Status != "" {
+		and = append(and, sq.Eq{"statusBanking": q.Status})
+	}
+	if q.ProductName != "" {
+		and = append(and, sq.Eq{"productnames": q.ProductName})
+	}
+	if q.BankCode != "" {
+		and = append(and, sq.Eq{"bankname": q.BankCode})
+	}
+	if q.QueueNumber != "" {
+		and = append(and, sq.Eq{"cusnum": q.QueueNumber})
+	}
+	if q.Term != "" {
+		and = append(and, sq.Eq{"term": q.Term})
+	}
+	if q.CreatedBy != "" {
+		and = append(and, sq.Eq{"createby": q.CreatedBy})
+	}
+	if q.Occupation != "" {
+		and = append(and, sq.Eq{"occupation": q.Occupation})
+	}
+
+	if !q.CreatedBefore.IsZero() {
+		and = append(and, sq.LtOrEq{"createdate": q.CreatedBefore})
+	}
+	if !q.CreatedAfter.IsZero() {
+		and = append(and, sq.GtOrEq{"createdate": q.CreatedAfter})
+	}
+
+	if q.nextID != "" {
+		and = append(and, sq.Lt{"CUID": q.nextID})
+	}
+
+	return and.ToSql()
+}
+
+func batchGetStatements(ctx context.Context, db *sql.DB, batchSize int, nextID string, in *BatchGetStatementReq) ([]*Statement, error) {
+	id := fmt.Sprintf("TOP %d CUID", batchSize)
+	in.nextID = nextID
+	pred, args, err := in.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to sql: %w", err)
+	}
+
+	q, args := sq.
+		Select(
+			id,
+			"cusnum",
+			"cus_name",
+			"AccNo",
+			"term",
+			"bankname",
+			"bankcreatedate",
+			"bankstatus",
+			"bankmoreinfo",
+			"gender",
+			"productnames",
+			"emailstatus",
+			"emailmsg",
+			"occupation",
+			"createby",
+			"statusBanking",
+			"createdate",
+		).
+		From("dbo.vm_customer").
+		PlaceholderFormat(sq.AtP).
+		Where(pred, args...).
+		OrderBy("CUID DESC").
+		MustSql()
+
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	statements := make([]*Statement, 0)
+	for rows.Next() {
+		var s Statement
+		var isSent sql.NullString
+		err := rows.Scan(
+			&s.ID,
+			&s.QueueNumber,
+			&s.Customer.DisplayName,
+			&s.BankAccount.Number,
+			&s.BankAccount.Term,
+			&s.BankAccount.Code,
+			&s.BankAccount.CreatedAt,
+			&s.BankAccount.Status,
+			&s.BankAccount.Info,
+			&s.Customer.Gender,
+			&s.ProductName,
+			&isSent,
+			&s.Email.Message,
+			&s.Customer.Occupation,
+			&s.CreatedBy,
+			&s.Status,
+			&s.CreatedAt,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrStatementNotFound
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		if isSent.Valid {
+			s.Email.IsSent = &isSent.String
+		}
+
+		statements = append(statements, &s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+
+	return statements, nil
+}
