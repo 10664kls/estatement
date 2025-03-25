@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sync"
 
 	"github.com/10664kls/estatement/internal/pager"
 
@@ -18,12 +19,15 @@ var ErrStatementNotFound = errors.New("statement not found")
 type Service struct {
 	db   *sql.DB
 	zlog *zap.Logger
+
+	mu *sync.RWMutex
 }
 
 func NewService(_ context.Context, db *sql.DB, zlog *zap.Logger) (*Service, error) {
 	s := &Service{
 		db:   db,
 		zlog: zlog,
+		mu:   new(sync.RWMutex),
 	}
 
 	return s, nil
