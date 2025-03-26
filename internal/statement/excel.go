@@ -70,7 +70,7 @@ func (s *Service) GenExcel(ctx context.Context, in *BatchGetStatementReq) (*byte
 			var bankCreatedAt, bankStatus, bankMoreInfo,
 				mailStatus, mailMsg string
 			if s.BankAccount.CreatedAt != nil {
-				bankCreatedAt = s.BankAccount.CreatedAt.Format("2006-01-02 15:04:05")
+				bankCreatedAt = s.BankAccount.CreatedAt.Format("02/01/2006 15:04:05")
 			}
 
 			if s.BankAccount.Status != nil {
